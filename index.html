@@ -142,6 +142,19 @@
             border-radius: 8px;
             max-width: 300px;
         }
+
+        #qualities {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: #cccccc;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 300px;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -170,6 +183,10 @@
         Watch the control panel to see what each key does!
     </div>
 
+    <div id="qualities">
+        <div id="currentQualities"></div>
+    </div>
+
     <div id="gameOver">
         <h1>GAME OVER!</h1>
         <p>Final Score: <span id="finalScore">0</span></p>
@@ -184,6 +201,32 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
+        // Microbe qualities
+        const microbeQualities = [
+            { name: 'Motility', description: 'how microbes move' },
+            { name: 'Scales', description: 'from one tiny cell to huge communities' },
+            { name: 'Rhythms', description: 'daily cycles, like a body clock' },
+            { name: 'Translucency', description: 'many microbes are see-through' },
+            { name: 'Communication', description: 'microbes sense each other and act together' },
+            { name: 'Biophysics', description: 'physical laws that matter at a tiny size' }
+        ];
+
+        // Randomly select and display 2-3 qualities at any time
+        let activeQualities = [];
+
+        function updateDisplayedQualities() {
+            const qualityCount = 2 + Math.floor(Math.random() * 2);
+            activeQualities = [];
+            const shuffled = [...microbeQualities].sort(() => Math.random() - 0.5);
+            
+            for (let i = 0; i < qualityCount; i++) {
+                activeQualities.push(shuffled[i].name);
+            }
+
+            const qualityDisplay = document.getElementById('currentQualities');
+            qualityDisplay.innerHTML = activeQualities.map(q => `<div>${q}</div>`).join('');
+        }
+
         // Game variables
         let player = {
             x: canvas.width / 2,
@@ -191,7 +234,8 @@
             radius: 15,
             speed: 3,
             score: 0,
-            alive: true
+            alive: true,
+            opacity: 0.7 // For translucency quality
         };
 
         let particles = [];
@@ -216,6 +260,7 @@
         let keys = {};
         let currentDirection = { x: 0, y: 0 };
         let controlChangeTimer = 15;
+        let qualityChangeTimer = 8; // Change displayed qualities every 8 seconds
 
         // Initialize particles (food)
         function createParticles(count) {
@@ -224,12 +269,13 @@
                     x: Math.random() * canvas.width,
                     y: Math.random() * canvas.height,
                     radius: 3,
-                    color: `hsl(${Math.random() * 360}, 100%, 60%)`
+                    color: `hsl(${Math.random() * 360}, 100%, 60%)`,
+                    opacity: 0.4 + Math.random() * 0.6 // Translucency
                 });
             }
         }
 
-        // Initialize enemies
+        // Initialize enemies with rhythm patterns
         function createEnemies(count) {
             for (let i = 0; i < count; i++) {
                 enemies.push({
@@ -239,7 +285,10 @@
                     speed: 1 + Math.random() * 1.5,
                     color: `hsl(${Math.random() * 360}, 70%, 50%)`,
                     directionChangeTimer: 0,
-                    direction: { x: Math.random() - 0.5, y: Math.random() - 0.5 }
+                    direction: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
+                    rhythmPhase: Math.random() * Math.PI * 2, // Rhythm/oscillation
+                    opacity: 0.5 + Math.random() * 0.5, // Translucency
+                    communicationRadius: 80 + Math.random() * 40 // Communication sensing
                 });
             }
         }
@@ -332,6 +381,13 @@
                 randomizeControls();
             }
 
+            // Update quality display timer
+            qualityChangeTimer -= deltaTime;
+            if (qualityChangeTimer <= 0) {
+                updateDisplayedQualities();
+                qualityChangeTimer = 8;
+            }
+
             // Update player
             updatePlayerDirection();
             player.x += currentDirection.x * player.speed;
@@ -358,27 +414,53 @@
                         x: Math.random() * canvas.width,
                         y: Math.random() * canvas.height,
                         radius: 3,
-                        color: `hsl(${Math.random() * 360}, 100%, 60%)`
+                        color: `hsl(${Math.random() * 360}, 100%, 60%)`,
+                        opacity: 0.4 + Math.random() * 0.6
                     });
                 }
             }
 
-            // Update enemies
-            enemies.forEach(enemy => {
+            // Update enemies with communication and rhythm behaviors
+            enemies.forEach((enemy, index) => {
+                // Rhythm behavior - oscillate movement
+                enemy.rhythmPhase += deltaTime * 2;
+                const rhythmInfluence = Math.sin(enemy.rhythmPhase) * 0.3;
+
+                // Direction change timer
                 enemy.directionChangeTimer--;
+                
+                // Communication - check for nearby microbes
+                let communicationEffect = { x: 0, y: 0 };
+                for (let other of enemies) {
+                    if (other !== enemy) {
+                        const dx = other.x - enemy.x;
+                        const dy = other.y - enemy.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < enemy.communicationRadius && distance > 0) {
+                            // Move towards other microbes (quorum sensing)
+                            communicationEffect.x += dx / distance * 0.1;
+                            communicationEffect.y += dy / distance * 0.1;
+                        }
+                    }
+                }
+
                 if (enemy.directionChangeTimer <= 0) {
                     enemy.direction = {
-                        x: Math.random() - 0.5,
-                        y: Math.random() - 0.5
+                        x: Math.random() - 0.5 + communicationEffect.x,
+                        y: Math.random() - 0.5 + communicationEffect.y
                     };
                     const magnitude = Math.sqrt(enemy.direction.x ** 2 + enemy.direction.y ** 2);
-                    enemy.direction.x /= magnitude;
-                    enemy.direction.y /= magnitude;
+                    if (magnitude > 0) {
+                        enemy.direction.x /= magnitude;
+                        enemy.direction.y /= magnitude;
+                    }
                     enemy.directionChangeTimer = 60 + Math.random() * 120;
                 }
 
-                enemy.x += enemy.direction.x * enemy.speed;
-                enemy.y += enemy.direction.y * enemy.speed;
+                // Apply rhythm influence to movement
+                enemy.x += (enemy.direction.x + rhythmInfluence) * enemy.speed;
+                enemy.y += (enemy.direction.y + rhythmInfluence) * enemy.speed;
 
                 // Keep enemies in bounds
                 if (enemy.x - enemy.radius < 0 || enemy.x + enemy.radius > canvas.width) {
@@ -400,7 +482,7 @@
                         // Player eats enemy
                         player.radius += enemy.radius * 0.5;
                         player.score += Math.floor(enemy.radius);
-                        enemies.splice(enemies.indexOf(enemy), 1);
+                        enemies.splice(index, 1);
                     } else {
                         // Enemy eats player
                         gameEnd();
@@ -418,17 +500,20 @@
             ctx.fillStyle = 'rgba(30, 60, 114, 0.1)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw particles
+            // Draw particles with translucency
             particles.forEach(p => {
                 ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.opacity;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.globalAlpha = 1.0;
             });
 
-            // Draw enemies
+            // Draw enemies with translucency and communication radius (when active)
             enemies.forEach(enemy => {
                 ctx.fillStyle = enemy.color;
+                ctx.globalAlpha = enemy.opacity;
                 ctx.beginPath();
                 ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
                 ctx.fill();
@@ -437,10 +522,21 @@
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
                 ctx.lineWidth = 2;
                 ctx.stroke();
+                ctx.globalAlpha = 1.0;
+
+                // Draw communication radius occasionally (when certain qualities are active)
+                if (activeQualities.includes('Communication') && Math.random() < 0.05) {
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.15)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(enemy.x, enemy.y, enemy.communicationRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
             });
 
-            // Draw player
+            // Draw player with translucency
             ctx.fillStyle = '#00ff88';
+            ctx.globalAlpha = player.opacity;
             ctx.beginPath();
             ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
             ctx.fill();
@@ -449,8 +545,9 @@
             ctx.strokeStyle = '#00cc66';
             ctx.lineWidth = 3;
             ctx.stroke();
+            ctx.globalAlpha = 1.0;
 
-            // Draw direction indicator
+            // Draw direction indicator (motility visualization)
             if (currentDirection.x !== 0 || currentDirection.y !== 0) {
                 const indicatorLength = player.radius + 20;
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
@@ -492,6 +589,7 @@
         createParticles(200);
         createEnemies(5);
         randomizeControls();
+        updateDisplayedQualities();
         gameLoop();
     </script>
 </body>
